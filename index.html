@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GHOST://PLAY — Autonomous AI Playtesting & Level QA</title>
+  <meta name="description" content="An autonomous AI agent suite that plays, tests, validates, and analyzes procedurally generated game levels before your players do.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="app">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="logo-row">
+          <h1 class="logo">GHOST<span class="slash">://</span>PLAY</h1>
+          <span class="badge-version">v2.0 PRO</span>
+        </div>
+        <p class="tagline">Autonomous AI Playtesting, Solvability Validation & Difficulty Telemetry</p>
+      </div>
+      <div class="topbar-right">
+        <button id="btn-audio" class="btn-icon" title="Toggle Synthesizer Sound Effects">🔇 SOUND OFF</button>
+        <button id="btn-export" class="btn-icon" title="Export Level JSON">💾 EXPORT JSON</button>
+        <button id="btn-screenshot" class="btn-icon" title="Save Heatmap as PNG">📸 SNAPSHOT</button>
+        <div class="meta-pill" id="level-tag">LEVEL #1</div>
+      </div>
+    </header>
+
+    <!-- GENERATION & SIMULATION CONTROLS -->
+    <section class="controls-bar" aria-label="Simulation Controls">
+      <div class="controls-primary-row">
+        <button id="btn-generate" class="btn ctrl-primary">⚙ GENERATE LEVEL</button>
+        <button id="btn-ghost-run" class="btn ctrl-cyan">▶ RUN GHOST PLAYTEST</button>
+        <button id="btn-batch-run" class="btn ctrl-amber">📊 RUN BATCH ANALYSIS (50×)</button>
+        <button id="btn-heatmap" class="btn ctrl-secondary" disabled>🔥 TOGGLE HEATMAP</button>
+        <button id="btn-play-human" class="btn ctrl-mode">🎮 PLAY AS HUMAN</button>
+      </div>
+
+      <!-- Parameter Customization Drawer -->
+      <div class="params-drawer">
+        <div class="param-group">
+          <label for="param-size">Size:</label>
+          <select id="param-size" class="param-select">
+            <option value="9,7">Small (9×7)</option>
+            <option value="13,9" selected>Standard (13×9)</option>
+            <option value="19,13">Large (19×13)</option>
+            <option value="25,17">Huge (25×17)</option>
+          </select>
+        </div>
+
+        <div class="param-group">
+          <label for="param-loops">Topology:</label>
+          <select id="param-loops" class="param-select">
+            <option value="0">Strict Maze (0% loops)</option>
+            <option value="0.08" selected>Standard (8% loops)</option>
+            <option value="0.22">Braided / Open (22% loops)</option>
+          </select>
+        </div>
+
+        <div class="param-group">
+          <label for="param-items">Cores:</label>
+          <select id="param-items" class="param-select">
+            <option value="1">1 Core</option>
+            <option value="2">2 Cores</option>
+            <option value="3" selected>3 Cores</option>
+            <option value="5">5 Cores</option>
+          </select>
+        </div>
+
+        <div class="param-group">
+          <label for="param-persona">AI Archetype:</label>
+          <select id="param-persona" class="param-select">
+            <option value="tremaux" selected>Cautious (Tremaux DFS)</option>
+            <option value="greedy">Greedy / Objective Rush</option>
+            <option value="chaotic">Chaotic Wanderer</option>
+            <option value="optimal">Speedrunner (A* Optimal)</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN TWO-COLUMN DASHBOARD -->
+    <main class="layout">
+
+      <!-- LEFT: VIEWPORT & LIVE CANVAS -->
+      <section class="panel canvas-panel">
+        <div class="panel-title">
+          <span>SIMULATION VIEWPORT <span id="agent-badge" class="agent-badge"></span></span>
+          <span id="run-status" class="run-status">READY</span>
+        </div>
+
+        <!-- Human Play HUD (Active during Human Mode) -->
+        <div id="human-hud" class="human-hud" style="display: none;">
+          <div class="human-hud-stats">
+            <div><strong>🎮 HUMAN MODE ACTIVE</strong></div>
+            <div>Cores: <span id="human-cores" class="hud-highlight">0/3</span> | Steps: <span id="human-steps" class="hud-highlight">0</span></div>
+          </div>
+          
+          <div class="human-hud-controls">
+            <span class="hud-keys-hint">Use [WASD / Arrows] or D-Pad:</span>
+            <div class="dpad-grid">
+              <button class="dpad-btn" id="dpad-up" title="Move Up">▲</button>
+              <div class="dpad-mid">
+                <button class="dpad-btn" id="dpad-left" title="Move Left">◀</button>
+                <button class="dpad-btn" id="dpad-down" title="Move Down">▼</button>
+                <button class="dpad-btn" id="dpad-right" title="Move Right">▶</button>
+              </div>
+            </div>
+            <button id="btn-human-quit" class="btn-sm-danger">EXIT</button>
+          </div>
+        </div>
+
+        <div class="canvas-viewport-wrap">
+          <canvas id="canvas" tabindex="0"></canvas>
+          <div id="canvas-tooltip" class="canvas-tooltip"></div>
+        </div>
+
+        <!-- Playback Controller Bar -->
+        <div class="playback-bar">
+          <div class="playback-controls">
+            <button id="btn-step-back" class="btn-playback" title="Step Back" disabled>⏮</button>
+            <button id="btn-play-pause" class="btn-playback" title="Play / Pause" disabled>▶</button>
+            <button id="btn-step-fwd" class="btn-playback" title="Step Forward" disabled>⏭</button>
+            <span id="step-counter" style="font-size: 0.72rem; color: var(--muted); margin-left: 6px;">Step: 0/0</span>
+          </div>
+
+          <div class="speed-control">
+            <label for="speed-slider">Speed:</label>
+            <input type="range" id="speed-slider" class="speed-slider" min="1" max="10" value="4">
+            <span id="speed-val">4×</span>
+          </div>
+
+          <div class="legend-bar">
+            <div class="legend-item"><span class="legend-marker" style="background: #38bdf8;"></span> Start</div>
+            <div class="legend-item"><span class="legend-marker" style="background: #fbbf24;"></span> Core</div>
+            <div class="legend-item"><span class="legend-marker" style="background: #34d399;"></span> Exit</div>
+            <div class="legend-item"><span class="legend-marker" style="background: #a78bfa;"></span> Ghost</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: METRICS & QA PANELS -->
+      <aside class="side-stack">
+
+        <!-- TAB NAVIGATION -->
+        <div class="panel">
+          <div class="tab-nav">
+            <button class="tab-btn active" data-tab="validator-tab">AI VALIDATOR</button>
+            <button class="tab-btn" data-tab="analyst-tab">ANALYTICS</button>
+            <button class="tab-btn" data-tab="log-tab">SYSTEM.LOG</button>
+          </div>
+
+          <!-- TAB 1: VALIDATOR -->
+          <div id="validator-tab" class="tab-content">
+            <div id="validator-list" class="validator-list">
+              <p class="hint">Generating validation matrix...</p>
+            </div>
+          </div>
+
+          <!-- TAB 2: ANALYST -->
+          <div id="analyst-tab" class="tab-content" style="display: none;">
+            <div id="analyst-body" class="analyst-body">
+              <p class="hint">Run a batch analysis (50×) to see difficulty metrics, variance, step distribution histogram, and bottleneck heatmaps.</p>
+            </div>
+          </div>
+
+          <!-- TAB 3: SYSTEM LOG -->
+          <div id="log-tab" class="tab-content" style="display: none; padding: 0;">
+            <div id="log-feed" class="log-feed"></div>
+          </div>
+        </div>
+
+        <!-- QUICK TELEMETRY SUMMARY WIDGET -->
+        <div class="panel">
+          <div class="panel-title">TELEMETRY & BASELINE</div>
+          <div style="padding: 12px 14px; font-size: 0.74rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: var(--muted);">Topology Size:</span>
+              <span id="tele-dims" style="font-weight: 700; color: var(--text);">27 × 19</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: var(--muted);">Optimal A* TSP Route:</span>
+              <span id="tele-optimal" style="font-weight: 700; color: var(--cyan-bright);">-- steps</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: var(--muted);">Dead Ends / Junctions:</span>
+              <span id="tele-deadends" style="font-weight: 700; color: var(--text);">-- / --</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--muted);">Latest Human Run:</span>
+              <span id="tele-human" style="font-weight: 700; color: var(--ok);">No run yet</span>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="core.js"></script>
+  <script src="audio.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
